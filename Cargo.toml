@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["utils", "day_1"]
+
+package.version = "1.0.0"
+package.authors = ["SteelPh0enix (Wojciech Olech)"]
+package.description = "Advent of Code 2023"
+package.edition = "2021"
+package.license = "MIT"
