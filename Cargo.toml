@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["utils", "day_1", "day_2"]
+members = ["utils", "day_1", "day_2", "day_3"]
 
 package.version = "1.0.0"
 package.authors = ["SteelPh0enix (Wojciech Olech)"]
