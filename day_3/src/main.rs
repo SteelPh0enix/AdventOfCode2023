@@ -1,5 +1,7 @@
 use std::ops::RangeInclusive;
 
+use utils::TextBlock;
+
 extern crate utils;
 
 /*
@@ -13,7 +15,7 @@ will be the "currently parsed" one, and top/bottom lines will be there as middle
 type PartNumber = u32;
 
 fn contains_symbol(text: &str) -> bool {
-    text.chars().any(|c| c.is_ascii_punctuation() && c != '.')
+    text.chars().any(|c| c != '.' && c.is_ascii_punctuation())
 }
 
 fn get_map_window(
@@ -21,75 +23,72 @@ fn get_map_window(
     end_index: usize,
     line_width: usize,
 ) -> RangeInclusive<usize> {
-    start_index.saturating_sub(1)..=(if end_index < (line_width - 1) {
-        end_index + 1
-    } else {
-        end_index
+    let start = start_index.saturating_sub(1);
+    let end = (end_index + 1).clamp(1, line_width - 1);
+
+    start..=end
+}
+
+fn line_contains_symbol_in_block(line: Option<&str>, block: &TextBlock) -> bool {
+    line.is_some_and(|line| {
+        contains_symbol(&line[get_map_window(block.start_index, block.end_index, line.len())])
     })
 }
 
-fn extract_part_numbers_to(
-    output: &mut Vec<PartNumber>,
-    top_line: &str,
-    current_line: &str,
-    bottom_line: &str,
-) {
+fn extract_part_numbers<'a>(
+    top_line: Option<&'a str>,
+    current_line: &'a str,
+    bottom_line: Option<&'a str>,
+) -> Vec<(PartNumber, TextBlock<'a>)> {
     utils::extract_all_unsigned_numbers(current_line)
         .iter()
         .filter_map(|&(value, block)| {
-            print!("Found {value} @ {block:?} ");
-            if contains_symbol(
-                &top_line[get_map_window(block.start_index, block.end_index, top_line.len())],
-            ) || contains_symbol(
-                &current_line
-                    [get_map_window(block.start_index, block.end_index, current_line.len())],
-            ) || contains_symbol(
-                &bottom_line[get_map_window(block.start_index, block.end_index, bottom_line.len())],
-            ) {
-                println!("and it's a P/N");
-                Some(value)
+            if line_contains_symbol_in_block(top_line, &block)
+                || line_contains_symbol_in_block(Some(current_line), &block)
+                || line_contains_symbol_in_block(bottom_line, &block)
+            {
+                Some((value, block))
             } else {
-                println!();
                 None
             }
         })
-        .for_each(|value| output.push(value));
+        .collect()
 }
 
 /// Returns list of part numbers
-fn parse_input(input: &str) -> Vec<PartNumber> {
+fn extract_all_part_numbers(input: &str) -> Vec<Vec<(PartNumber, TextBlock)>> {
+    let mut part_numbers = Vec::new();
     let mut lines = input.lines();
 
+    let mut top_line: Option<&str> = None;
     let mut current_line: &str = lines.next().unwrap();
-    let mut bottom_line: &str = lines.next().unwrap();
-    let line_width = current_line.len();
-    let dummy_line = String::from_iter((0..line_width).map(|_| '.'));
-    let mut top_line: &str = dummy_line.as_str();
-
-    let mut part_numbers = Vec::<PartNumber>::new();
+    let mut bottom_line: Option<&str> = lines.next();
 
     while let Some(next_line) = lines.next() {
-        extract_part_numbers_to(&mut part_numbers, top_line, current_line, bottom_line);
-        top_line = current_line;
-        current_line = bottom_line;
-        bottom_line = next_line;
+        part_numbers.push(extract_part_numbers(top_line, current_line, bottom_line));
+        top_line = Some(current_line);
+        current_line = bottom_line.unwrap();
+        bottom_line = Some(next_line);
     }
 
-    // Repeat one last time, but push dummy line as bottom one.
-    top_line = current_line;
-    current_line = bottom_line;
-    bottom_line = dummy_line.as_str();
-    extract_part_numbers_to(&mut part_numbers, top_line, current_line, bottom_line);
+    // Repeat for last two lines, but push dummy line as bottom one.
+    part_numbers.push(extract_part_numbers(top_line, current_line, bottom_line));
+
+    top_line = Some(current_line);
+    current_line = bottom_line.unwrap();
+    bottom_line = None;
+
+    part_numbers.push(extract_part_numbers(top_line, current_line, bottom_line));
 
     part_numbers
 }
 
 fn main() {
     let input = utils::load_aoc_input();
-    let part_numbers = parse_input(input.as_str());
+    let part_numbers = extract_all_part_numbers(input.as_str());
 
-    println!(
-        "Sum of part numbers is {}",
-        part_numbers.iter().sum::<u32>()
-    );
+    let part_numbers_sum: u32 = part_numbers.iter().fold(0, |sum, current| {
+        sum + current.iter().fold(0, |sum, current| sum + current.0)
+    });
+    println!("Sum of part numbers: {part_numbers_sum}");
 }
